@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
+	"time"
 )
 
 // JSON for a Knative Service (CE App)
@@ -62,6 +64,21 @@ func CreateApp(name string, image string) error {
 			return err
 		}
 		return fmt.Errorf("%d: %s", code, body)
+	}
+
+	// Now wait for the URL of the App to be created and return it
+	path += "/" + name
+	for {
+		code, body, err = KubeCall("GET", path, "")
+		if i := strings.Index(body, "\"url\":"); i > 0 {
+			// Grab the URL + rest of line (w/o http)
+			url := body[i+7:]
+			// Stop at the "
+			url = "https" + url[4:strings.Index(url, "\"")]
+			fmt.Printf("URL: %s\n", url)
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
 	return nil
 }

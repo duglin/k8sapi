@@ -59,7 +59,7 @@ func init() {
 
 	// Use KUBECONFIG env var if set
 	if kubeconfig := os.Getenv("KUBECONFIG"); kubeconfig != "" {
-		buf, err := os.ReadFile(kubeconfig)
+		buf, err := ioutil.ReadFile(kubeconfig)
 		if err == nil && len(buf) > 0 {
 			kconfig := KubeConfig{}
 			err = yaml.Unmarshal(buf, &kconfig)

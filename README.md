@@ -1,12 +1,21 @@
 # k8sapi
 
+To build on Ubuntu, this should work:
+```
+$ apt install -y make git golang-go
+$ go get gopkg.in/yaml.v2
+$ make
+```
+
 To use with Code Engine:
 ```
-ic ce project current
-# grab the KUBECONFIG env var
-KUBECONFIG=... ./k8sapi
+ibmcloud ce project current
+# grab the KUBECONFIG env var, quote the value if there are spaces
+KUBECONFIG="..." ./k8sapi
 ```
+
 or
+
 ```
-sh -c "`ic ce project current  | awk '/export /{print $2}'` ./k8sapi"
+KUBECONFIG="`ic ce project current  | sed -n s/.*KUBECONFIG=//p`" ./k8sapi
 ```
