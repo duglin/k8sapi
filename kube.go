@@ -1,4 +1,4 @@
-package main
+package lib
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/user"
 
 	"gopkg.in/yaml.v2"
 )
@@ -22,7 +23,8 @@ type KubeConfig struct {
 	Clusters []struct {
 		Name    string
 		Cluster struct {
-			Server string
+			CertAuth string `yaml:"certificate-authority"`
+			Server   string
 		}
 	}
 	Contexts []struct {
@@ -57,8 +59,19 @@ type KubeConfig struct {
 func init() {
 	var buf []byte
 
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if kubeconfig == "" {
+		user, _ := user.Current()
+		if user.HomeDir != "" {
+			kubeconfig = user.HomeDir + "/.kube/config"
+			if _, err := os.Stat(kubeconfig); err != nil {
+				kubeconfig = ""
+			}
+		}
+	}
+
 	// Use KUBECONFIG env var if set
-	if kubeconfig := os.Getenv("KUBECONFIG"); kubeconfig != "" {
+	if kubeconfig != "" {
 		buf, err := ioutil.ReadFile(kubeconfig)
 		if err == nil && len(buf) > 0 {
 			kconfig := KubeConfig{}
@@ -71,6 +84,15 @@ func init() {
 						for _, cluster := range kconfig.Clusters {
 							if cluster.Name == ctx.Context.Cluster {
 								Server = cluster.Cluster.Server
+
+								cert := []byte{}
+								if cluster.Cluster.CertAuth != "" {
+									if cert, err = ioutil.ReadFile(cluster.Cluster.CertAuth); err == nil {
+										CertPool = x509.NewCertPool()
+										CertPool.AppendCertsFromPEM(cert)
+
+									}
+								}
 								break
 							}
 						}
@@ -129,8 +151,16 @@ func KubeCall(method string, path string, body string) (int, string, error) {
 	}
 
 	// Now do the Kubernetes call
-	req, _ := http.NewRequest(method, Server+path, reader)
-	req.Header.Add("Content-Type", "application/json")
+	req, err := http.NewRequest(method, Server+path, reader)
+	if err != nil {
+		return 0, "", err
+	}
+
+	if method == "PATCH" {
+		req.Header.Add("Content-Type", "application/merge-patch+json")
+	} else {
+		req.Header.Add("Content-Type", "application/json")
+	}
 	req.Header.Add("Authorization", "Bearer "+Token)
 
 	// fmt.Printf("URL: %s\n", Server+path)
@@ -151,4 +181,87 @@ func KubeCall(method string, path string, body string) (int, string, error) {
 	buf, err := ioutil.ReadAll(res.Body)
 
 	return res.StatusCode, string(buf), err
+}
+
+func KubeStream(method string, path string, body string) (int, io.Reader, error) {
+	var reader io.Reader
+
+	if body != "" {
+		reader = bytes.NewReader([]byte(body))
+	}
+
+	// Now do the Kubernetes call
+	req, err := http.NewRequest(method, Server+path, reader)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", "Bearer "+Token)
+
+	// fmt.Printf("URL: %s\n", Server+path)
+	// fmt.Printf("Token: %s\n", Token)
+
+	client := &http.Client{}
+	if CertPool != nil {
+		// Only going to be used if we're in a container
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{RootCAs: CertPool}}
+	}
+
+	res, err := client.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return res.StatusCode, res.Body, nil
+}
+
+type KubeObject struct {
+	APIVersion string
+	Kind       string
+	Metadata   struct {
+		Name                string            `json:"name,omitempty"`
+		Namespace           string            `json:"namespace,omitempty"`
+		CreationTimestamp   string            `json:"creationTimestamp,omitempty"`
+		DeletionTimestamp   string            `json:"deletionTimestamp,omitempty"`
+		Annotations         map[string]string `json:"annotations,omitempty"`
+		Labels              map[string]string `json:"labels,omitempty"`
+		ResourceVersion     string            `json:"resourceVersion,omitempty"`
+		UID                 string            `json:"uid,omitempty"`
+		GenerateName        string            `json:"generateName,omitempty"`
+		DeletionGracePeriod int64             `json:"deletionGracePeriod,omitempty"`
+		Generation          int64             `json:"geneation,omitempty"`
+		Finalizers          []string          `json:"finalizers,omitempty"`
+		// SelfLink            string   `json:"selfLink,omitempty"`
+		OwnerReference []struct {
+			APIVersion         string `json:"apiVersion,omitempty"`
+			Kind               string `json:"kind,omitempty"`
+			Name               string `json:"name,omitempty"`
+			UID                string `json:"uid,omitempty"`
+			BlockOwnerDeletion bool   `json:"blockOwnerDeletion,omitempty"`
+			Controller         bool   `json:"controller,omitempty"`
+		} `json:"ownerReference,omitempty"`
+	}
+}
+
+type KubeEvent struct {
+	Object struct {
+		KubeObject
+
+		Code    int
+		Message string
+		Reason  string
+		// Status  string
+	}
+	Type string // ADDED, DELETED, MODIFIED, ERROR
+}
+
+type KubeList struct {
+	APIVersion string
+	Kube       string
+	Metadata   struct {
+		Continue        string
+		ResourceVersion string
+	}
+	Items []*KubeObject
 }
