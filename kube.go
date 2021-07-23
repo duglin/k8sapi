@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -242,6 +243,8 @@ type KubeObject struct {
 			Controller         bool   `json:"controller,omitempty"`
 		} `json:"ownerReference,omitempty"`
 	}
+	Spec   json.RawMessage
+	Status json.RawMessage
 }
 
 type KubeEvent struct {
@@ -264,4 +267,13 @@ type KubeList struct {
 		ResourceVersion string
 	}
 	Items []*KubeObject
+}
+
+type KubeListHeader struct {
+	APIVersion string
+	Kube       string
+	Metadata   struct {
+		Continue        string
+		ResourceVersion string
+	}
 }
