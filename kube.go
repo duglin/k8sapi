@@ -140,7 +140,7 @@ func init() {
 	}
 
 	fmt.Fprintf(os.Stderr, "KUBECONFIG isn't set or no serviceaccount dir\n")
-	os.Exit(1)
+	// os.Exit(1)
 }
 
 // Call Kubernetes at the specified path with the method and body (if present)
