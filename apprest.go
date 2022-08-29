@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	k8sapi "github.com/duglin/k8sapi/lib"
 )
 
 // JSON for a Knative Service (CE App)
@@ -58,19 +60,19 @@ var minimalApp = `
 
 func CreateApp(name string, image string) error {
 	appStr := fmt.Sprintf(minimalApp, name, image)
-	path := "/apis/serving.knative.dev/v1/namespaces/" + Namespace + "/services"
-	code, body, err := KubeCall("POST", path, appStr)
+	path := "/apis/serving.knative.dev/v1/namespaces/" + k8sapi.Namespace + "/services"
+	code, body, err := k8sapi.KubeCall("POST", path, appStr)
 	if code/100 != 2 {
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("%d: %s", code, body)
+		return fmt.Errorf("%d: %s->%s", code, path, body)
 	}
 
 	// Now wait for the URL of the App to be created and return it
 	path += "/" + name
 	for {
-		code, body, err = KubeCall("GET", path, "")
+		code, body, err = k8sapi.KubeCall("GET", path, "")
 		if i := strings.Index(body, "\"url\":"); i > 0 {
 			// Grab the URL + rest of line (w/o http)
 			url := body[i+7:]
@@ -85,9 +87,9 @@ func CreateApp(name string, image string) error {
 }
 
 func DeleteApp(name string) error {
-	path := "/apis/serving.knative.dev/v1/namespaces/" + Namespace +
+	path := "/apis/serving.knative.dev/v1/namespaces/" + k8sapi.Namespace +
 		"/services/" + name
-	code, body, err := KubeCall("DELETE", path, "")
+	code, body, err := k8sapi.KubeCall("DELETE", path, "")
 	if code/100 != 2 {
 		if err != nil {
 			return err
@@ -98,9 +100,9 @@ func DeleteApp(name string) error {
 }
 
 func GetAppStatus(name string) (bool, error) {
-	path := "/apis/serving.knative.dev/v1/namespaces/" + Namespace +
+	path := "/apis/serving.knative.dev/v1/namespaces/" + k8sapi.Namespace +
 		"/services/" + name
-	code, body, err := KubeCall("GET", path, "")
+	code, body, err := k8sapi.KubeCall("GET", path, "")
 	if code/100 != 2 {
 		if err != nil {
 			return false, err
@@ -180,6 +182,10 @@ func WaitForApp(name string) error {
 }
 
 func main() {
+	if k8sapi.Namespace == "" {
+		k8sapi.Namespace = "default"
+	}
+
 	err := CreateApp("echo2", "duglin/echo")
 	if err != nil {
 		fmt.Printf("%s\n", err)
