@@ -73,7 +73,7 @@ func init() {
 func LoadKubeConfig() error {
 	var buf []byte
 
-	kubeconfig := os.Getenv("KUBECONFIG1")
+	kubeconfig := os.Getenv("KUBECONFIG")
 	if kubeconfig == "" {
 		user, _ := user.Current()
 		if user.HomeDir != "" {
@@ -86,6 +86,7 @@ func LoadKubeConfig() error {
 
 	// Use KUBECONFIG env var if set
 	if kubeconfig != "" {
+		log := ""
 		buf, err := ioutil.ReadFile(kubeconfig)
 		if err != nil || len(buf) == 0 {
 			return fmt.Errorf("Error reading %q: %s", kubeconfig, err)
@@ -102,17 +103,20 @@ func LoadKubeConfig() error {
 			if ctx.Name != ctxName {
 				continue
 			}
+			log += fmt.Sprintf("\nFound context %q", ctxName)
 
 			Namespace = ctx.Context.Namespace
 			for _, cluster := range kconfig.Clusters {
 				if cluster.Name != ctx.Context.Cluster {
 					continue
 				}
+				log += fmt.Sprintf("\nFound cluster %q", cluster.Name)
 
 				Server = cluster.Cluster.Server
 
 				cert := []byte{}
 				if cluster.Cluster.CertAuth != "" {
+					log += fmt.Sprintf("\nUsing CertAuth")
 					cert, err = ioutil.ReadFile(cluster.Cluster.CertAuth)
 					if err != nil {
 						return fmt.Errorf("Error reading Cert (%s): %s",
@@ -122,6 +126,7 @@ func LoadKubeConfig() error {
 					CertPool.AppendCertsFromPEM(cert)
 
 				} else if cluster.Cluster.CertAuthData != "" {
+					log += fmt.Sprintf("\nUsing CertAuthData")
 					CertPool = x509.NewCertPool()
 					data, err := base64.StdEncoding.DecodeString(
 						cluster.Cluster.CertAuthData)
@@ -136,6 +141,7 @@ func LoadKubeConfig() error {
 
 			for _, user := range kconfig.Users {
 				if user.Name == ctx.Context.User {
+					log += fmt.Sprintf("\nFound user %q", user.Name)
 					Token = user.User.AuthProvider.Config.IDToken
 					if Token == "" {
 						Token = user.User.Token
@@ -144,12 +150,13 @@ func LoadKubeConfig() error {
 				}
 			}
 
+			log += fmt.Sprintf("\nServer: %q Token: %q", Server, Token)
 			if Server != "" && Token != "" {
 				return nil
 			}
 		}
-		return fmt.Errorf("Can't find current context in Kube config(%s)",
-			kubeconfig)
+		return fmt.Errorf("Can't find current context in Kube config(%s)%s",
+			kubeconfig, log)
 	}
 
 	// Assume we must be in a container so just use the config files that
@@ -299,8 +306,9 @@ type KubeList struct {
 	APIVersion string
 	Kube       string
 	Metadata   struct {
-		Continue        string
-		ResourceVersion string
+		Continue           string
+		ResourceVersion    string
+		RemainingItemCount *int64 `json:"remainingItemCount,omitempty"`
 	}
 	Items []*KubeObject
 }
@@ -312,4 +320,29 @@ type KubeListHeader struct {
 		Continue        string
 		ResourceVersion string
 	}
+}
+
+type KubeStatus struct {
+	Kind       string `json:"kind,omitempty"`
+	APIVersion string `json:"apiVersion,omitempty"`
+	Metadata   struct {
+		SelfLink           string `json:"selfLink,omitempty"`
+		ResourceVersion    string `json:"resourceVersion,omitempty"`
+		Continue           string `json:"continue,omitempty"`
+		RemainingItemCount *int64 `json:"remainingItemCount,omitempty"`
+	} `json:"metadata,omitempty"`
+	Status  string `json:"status,omitempty"`
+	Message string `json:"message,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+	Details struct {
+		Name   string `json:"name,omitempty"`
+		Group  string `json:"group,omitempty"`
+		Kind   string `json:"kind,omitempty"`
+		Causes []struct {
+			Reason  string `json:"reason,omitempty"`
+			Message string `json:"message,omitempty"`
+			Field   string `json:"field,omitempty"`
+		} `json:"causes,omitempty"`
+	} `json:"details,omitempty"`
+	Code int `json:"code,omitempty"`
 }
