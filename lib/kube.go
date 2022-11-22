@@ -123,12 +123,16 @@ func LoadKubeConfig() error {
 						return fmt.Errorf("Error reading Cert (%s): %s",
 							cluster.Cluster.CertAuth, err)
 					}
-					CertPool = x509.NewCertPool()
+					if CertPool == nil {
+						CertPool = x509.NewCertPool()
+					}
 					CertPool.AppendCertsFromPEM(cert)
 
 				} else if cluster.Cluster.CertAuthData != "" {
 					log += fmt.Sprintf("\nUsing CertAuthData")
-					CertPool = x509.NewCertPool()
+					if CertPool == nil {
+						CertPool = x509.NewCertPool()
+					}
 					data, err := base64.StdEncoding.DecodeString(
 						cluster.Cluster.CertAuthData)
 					if err != nil {
@@ -140,6 +144,7 @@ func LoadKubeConfig() error {
 				break
 			}
 
+			haveClient := false
 			for _, user := range kconfig.Users {
 				if user.Name == ctx.Context.User {
 					log += fmt.Sprintf("\nFound user %q", user.Name)
@@ -148,16 +153,31 @@ func LoadKubeConfig() error {
 						Token = user.User.Token
 						break
 					}
+
+					if user.ClientCertificateData != "" {
+						log += fmt.Sprintf("\nUsing ClientCertificateData")
+						if CertPool == nil {
+							CertPool = x509.NewCertPool()
+						}
+						data, err := base64.StdEncoding.DecodeString(
+							user.ClientCertificateData)
+						if err != nil {
+							return fmt.Errorf("Error base64 decoding Client"+
+								" Cert Data: %s", err)
+						}
+						CertPool.AppendCertsFromPEM(data)
+						haveClient = true
+					}
 				}
 			}
 
 			log += fmt.Sprintf("\nServer: %q Token: %q", Server, Token)
-			if Server != "" && Token != "" {
+			if Server != "" && (Token != "" || haveClient) {
 				return nil
 			}
 		}
-		return fmt.Errorf("Can't find current context (%) in Kube config(%s)%s",
-			ctxName, kubeconfig, log)
+		return fmt.Errorf("Can't find current context (%s) in Kube "+
+			"config(%s)%s", ctxName, kubeconfig, log)
 	}
 
 	// Assume we must be in a container so just use the config files that
@@ -241,7 +261,9 @@ func KubeStream(method string, path string, body string) (int, io.Reader, error)
 		return 0, nil, err
 	}
 	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", "Bearer "+Token)
+	if Token != "" {
+		req.Header.Add("Authorization", "Bearer "+Token)
+	}
 
 	// fmt.Printf("URL: %s\n", Server+path)
 	// fmt.Printf("Token: %s\n", Token)
