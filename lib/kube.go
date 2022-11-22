@@ -100,6 +100,7 @@ func LoadKubeConfig() error {
 
 		ctxName := kconfig.CurrentContext
 		for _, ctx := range kconfig.Contexts {
+			log += fmt.Sprintf("\nChecking context: %s", ctx.Name)
 			if ctx.Name != ctxName {
 				continue
 			}
@@ -155,8 +156,8 @@ func LoadKubeConfig() error {
 				return nil
 			}
 		}
-		return fmt.Errorf("Can't find current context in Kube config(%s)%s",
-			kubeconfig, log)
+		return fmt.Errorf("Can't find current context (%) in Kube config(%s)%s",
+			ctxName, kubeconfig, log)
 	}
 
 	// Assume we must be in a container so just use the config files that
