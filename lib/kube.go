@@ -154,13 +154,13 @@ func LoadKubeConfig() error {
 						break
 					}
 
-					if user.ClientCertificateData != "" {
+					if user.User.ClientCertificateData != "" {
 						log += fmt.Sprintf("\nUsing ClientCertificateData")
 						if CertPool == nil {
 							CertPool = x509.NewCertPool()
 						}
 						data, err := base64.StdEncoding.DecodeString(
-							user.ClientCertificateData)
+							user.User.ClientCertificateData)
 						if err != nil {
 							return fmt.Errorf("Error base64 decoding Client"+
 								" Cert Data: %s", err)
