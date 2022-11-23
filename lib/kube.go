@@ -19,6 +19,7 @@ import (
 var Server = ""
 var Namespace = ""
 var Token = ""
+var Cert = (*tls.Certificate)(nil)
 var CertPool = (*x509.CertPool)(nil)
 
 type KubeConfig struct {
@@ -144,7 +145,6 @@ func LoadKubeConfig() error {
 				break
 			}
 
-			haveClient := false
 			for _, user := range kconfig.Users {
 				if user.Name == ctx.Context.User {
 					log += fmt.Sprintf("\nFound user %q", user.Name)
@@ -157,40 +157,35 @@ func LoadKubeConfig() error {
 						break
 					}
 
-					if user.User.ClientCertificateData != "" {
-						log += fmt.Sprintf("\nUsing ClientCertificateData")
-						if CertPool == nil {
-							CertPool = x509.NewCertPool()
-						}
-						data, err := base64.StdEncoding.DecodeString(
+					if user.User.ClientCertificateData != "" &&
+						user.User.ClientKeyData != "" {
+
+						cert, err := base64.StdEncoding.DecodeString(
 							user.User.ClientCertificateData)
 						if err != nil {
 							return fmt.Errorf("Error base64 decoding Client"+
 								" Cert Data: %s", err)
 						}
-						CertPool.AppendCertsFromPEM(data)
-						haveClient = true
-					}
 
-					if user.User.ClientKeyData != "" {
-						log += fmt.Sprintf("\nUsing ClientKeyData")
-						if CertPool == nil {
-							CertPool = x509.NewCertPool()
-						}
-						data, err := base64.StdEncoding.DecodeString(
+						key, err := base64.StdEncoding.DecodeString(
 							user.User.ClientKeyData)
 						if err != nil {
 							return fmt.Errorf("Error base64 decoding Client"+
 								" Key Data: %s", err)
 						}
-						CertPool.AppendCertsFromPEM(data)
-						haveClient = true
+
+						tmpCert, err := tls.X509KeyPair(cert, key)
+						if err != nil {
+							return fmt.Errorf("Error getting X509 key "+
+								"pair: %s", err)
+						}
+						Cert = &tmpCert
 					}
 				}
 			}
 
-			log += fmt.Sprintf("\nServer: %q Token: %q", Server, Token)
-			if Server != "" && (Token != "" || haveClient) {
+			log += fmt.Sprintf("\nServer: %q Token: %q Cert: %q", Server, Token, Cert)
+			if Server != "" && (Token != "" || Cert != nil) {
 				return nil
 			}
 		}
@@ -253,10 +248,21 @@ func KubeCall(method string, path string, body string) (int, string, error) {
 
 	client := &http.Client{}
 	fmt.Printf("CertPool: %#v\n", CertPool)
-	if CertPool != nil {
+	if CertPool != nil || Cert != nil {
+		if CertPool == nil {
+			CertPool = x509.NewCertPool()
+		}
+
 		// Only going to be used if we're in a container
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{RootCAs: CertPool}}
+		T := &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: CertPool,
+			},
+		}
+		if Cert != nil {
+			T.TLSClientConfig.Certificates = []tls.Certificate{*Cert}
+		}
+		client.Transport = T
 	}
 
 	res, err := client.Do(req)
