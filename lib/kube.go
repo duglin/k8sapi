@@ -207,7 +207,9 @@ func LoadKubeConfig() error {
 
 			cert := []byte{}
 			if cert, err = ioutil.ReadFile(kubeDir + "/ca.crt"); err == nil {
-				CertPool = x509.NewCertPool()
+				if CertPool == nil {
+					CertPool = x509.NewCertPool()
+				}
 				CertPool.AppendCertsFromPEM(cert)
 
 				if buf, err = ioutil.ReadFile(kubeDir + "/token"); err == nil {
@@ -250,6 +252,7 @@ func KubeCall(method string, path string, body string) (int, string, error) {
 	// fmt.Printf("Token: %s\n", Token)
 
 	client := &http.Client{}
+	fmt.Printf("CertPool: %#v\n", CertPool)
 	if CertPool != nil {
 		// Only going to be used if we're in a container
 		client.Transport = &http.Transport{
@@ -287,7 +290,6 @@ func KubeStream(method string, path string, body string) (int, io.Reader, error)
 	// fmt.Printf("Token: %s\n", Token)
 
 	client := &http.Client{}
-	fmt.Printf("CertPool: %#v\n", CertPool)
 	if CertPool != nil {
 		// Only going to be used if we're in a container
 		client.Transport = &http.Transport{
