@@ -149,7 +149,6 @@ func LoadKubeConfig() error {
 				if user.Name == ctx.Context.User {
 					log += fmt.Sprintf("\nFound user %q", user.Name)
 
-					fmt.Printf("User: %#v\n", user.User)
 					Token = user.User.AuthProvider.Config.IDToken
 					if Token == "" {
 						Token = user.User.Token
@@ -168,6 +167,21 @@ func LoadKubeConfig() error {
 						if err != nil {
 							return fmt.Errorf("Error base64 decoding Client"+
 								" Cert Data: %s", err)
+						}
+						CertPool.AppendCertsFromPEM(data)
+						haveClient = true
+					}
+
+					if user.User.ClientKeyData != "" {
+						log += fmt.Sprintf("\nUsing ClientKeyData")
+						if CertPool == nil {
+							CertPool = x509.NewCertPool()
+						}
+						data, err := base64.StdEncoding.DecodeString(
+							user.User.ClientKeyData)
+						if err != nil {
+							return fmt.Errorf("Error base64 decoding Client"+
+								" Key Data: %s", err)
 						}
 						CertPool.AppendCertsFromPEM(data)
 						haveClient = true
