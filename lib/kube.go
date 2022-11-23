@@ -148,13 +148,15 @@ func LoadKubeConfig() error {
 			for _, user := range kconfig.Users {
 				if user.Name == ctx.Context.User {
 					log += fmt.Sprintf("\nFound user %q", user.Name)
+
+					fmt.Printf("User: %#v\n", user.User)
 					Token = user.User.AuthProvider.Config.IDToken
 					if Token == "" {
 						Token = user.User.Token
+					}
+					if Token != "" {
 						break
 					}
-
-					fmt.Printf("User: %#v\n", user.User)
 
 					if user.User.ClientCertificateData != "" {
 						log += fmt.Sprintf("\nUsing ClientCertificateData")
