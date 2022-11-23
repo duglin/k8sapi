@@ -247,7 +247,6 @@ func KubeCall(method string, path string, body string) (int, string, error) {
 	// fmt.Printf("Token: %s\n", Token)
 
 	client := &http.Client{}
-	fmt.Printf("CertPool: %#v\n", CertPool)
 	if CertPool != nil || Cert != nil {
 		if CertPool == nil {
 			CertPool = x509.NewCertPool()
@@ -296,10 +295,21 @@ func KubeStream(method string, path string, body string) (int, io.Reader, error)
 	// fmt.Printf("Token: %s\n", Token)
 
 	client := &http.Client{}
-	if CertPool != nil {
+	if CertPool != nil || Cert != nil {
+		if CertPool == nil {
+			CertPool = x509.NewCertPool()
+		}
+
 		// Only going to be used if we're in a container
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{RootCAs: CertPool}}
+		T := &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: CertPool,
+			},
+		}
+		if Cert != nil {
+			T.TLSClientConfig.Certificates = []tls.Certificate{*Cert}
+		}
+		client.Transport = T
 	}
 
 	res, err := client.Do(req)
