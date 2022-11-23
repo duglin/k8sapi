@@ -287,6 +287,7 @@ func KubeStream(method string, path string, body string) (int, io.Reader, error)
 	// fmt.Printf("Token: %s\n", Token)
 
 	client := &http.Client{}
+	fmt.Printf("CertPool: %#v\n", CertPool)
 	if CertPool != nil {
 		// Only going to be used if we're in a container
 		client.Transport = &http.Transport{
