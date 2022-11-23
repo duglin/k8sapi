@@ -154,6 +154,8 @@ func LoadKubeConfig() error {
 						break
 					}
 
+					fmt.Printf("User: %#v\n", user.User)
+
 					if user.User.ClientCertificateData != "" {
 						log += fmt.Sprintf("\nUsing ClientCertificateData")
 						if CertPool == nil {
